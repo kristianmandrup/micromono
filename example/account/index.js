@@ -3,11 +3,7 @@
  */
 
 var path = require('path');
-var bodyParser = require('body-parser');
-var cookieParser = require('cookie-parser');
-var bodyParser = require('body-parser');
-var session = require('express-session');
-var connect = require('connect');
+var server = require('koa');
 
 // setup micromono
 var MicroMono = require('micromono');
@@ -24,33 +20,46 @@ var passportAuth = passport.authenticate('local', {
   failureFlash: false
 });
 
-function isAuthenticated(req, res) {
-  if (req.isAuthenticated()) {
+function* isAuthenticated() {
+  if (this.req.isAuthenticated()) {
     return true;
   } else {
-    res.redirect('/account/login');
+    this.res.redirect('/account/login');
     return false;
   }
 }
 
+const Router = require('koa-router');
+
+var logger = require('koa-logger');
+var bodyParser = require('koa-bodyparser');
+
 // setup a dedicated connect middleware for parsing data and session,
 // so we can reuse it in the `auth` middleware and the express app.
-var connectAuth = connect();
+var app = server();
 
-connectAuth.use(bodyParser.json());
-connectAuth.use(bodyParser.urlencoded({
-  extended: false
+// See: http://www.zev23.com/2014/03/koajs-tutorial-authenticate-with_7.html
+
+app.use(bodyParser());
+app.use(logger());
+
+var session = require('koa-generic-session');
+
+// TODO: use key name loaded from config file
+app.keys = ['micromono'];
+
+// TODO: load from config file!
+//  5 minutes default
+const maxAge = 1000 * 60 * 5;
+const redisStore = require('koa-redis');
+
+app.use(session({
+  cookie: {maxAge: maxAge},
+  store: redisStore
 }));
 
-connectAuth.use(cookieParser());
-connectAuth.use(session({
-  secret: 'micromono',
-  resave: true,
-  saveUninitialized: true
-}));
-
-connectAuth.use(passport.initialize());
-connectAuth.use(passport.session());
+app.use(passport.initialize());
+app.use(passport.session());
 
 /**
  * Account service
@@ -60,20 +69,18 @@ var Account = module.exports = Service.extend({
   baseUrl: '/account',
   middleware: {
     auth: function() {
-      return function(req, res, next) {
-        if (req.isAuthenticated()) {
-          next();
+      //Middleware: authed
+      function *authed(next){
+        if (this.req.isAuthenticated()){
+          yield next;
         } else {
-          connectAuth(req, res, function() {
-            if (isAuthenticated(req, res)) {
-              next();
-            }
-          });
+          //Set redirect path in session
+          this.session.returnTo = this.session.returnTo || this.req.url;
+          this.redirect('/account/login');
         }
-      };
+      }
     }
   },
-
   use: {
     // tell micromono to use `layout` middleware at the server side
     // for request url matching `/account/:page`.
@@ -88,37 +95,34 @@ var Account = module.exports = Service.extend({
     /**
      * Example protected page
      */
-    'get::/protected': function protected(req, res) {
-      if (isAuthenticated(req, res)) {
-        res.render('hello', {
-          name: req.user.username
+    'get::/protected': function* protected() {
+      if (isAuthenticated(this)) {
+        this.res.render('hello', {
+          name: this.req.user.username
         });
       }
     },
 
-    'get::/logout': function logout(req, res) {
-      req.logout();
-      res.redirect('/account/login');
+    'get::/logout': function* logout() {
+      this.req.logout();
+      this.res.redirect('/account/login');
     },
 
-    'get::/login': function login(req, res) {
-      res.render('login');
+    'get::/login': function* login() {
+      this.res.render('login');
     },
 
     /**
      * Login form handler
      */
-    'post::/login': [passportAuth, function loginOkay(req, res) {
-      res.redirect('/account/protected');
+    'post::/login': [passportAuth, function* loginOkay() {
+      this.res.redirect('/account/protected');
     }]
   },
 
   init: function() {
     // get express instance
     var app = this.app;
-
-    // attach the connect auth middleware to our local express app
-    app.use(connectAuth);
 
     // setup template engine
     app.set('views', path.join(__dirname, './view'));

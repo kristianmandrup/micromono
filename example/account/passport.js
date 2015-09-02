@@ -2,7 +2,7 @@
  * Module for setup passport with fake authentication
  */
 
-var passport = require('passport');
+var passport = require('koa-passport');
 var LocalStrategy = require('passport-local').Strategy;
 
 // User is hard coded for demostration purpose

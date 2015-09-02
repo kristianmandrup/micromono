@@ -5,7 +5,7 @@ install:
 	cd server/ && npm i && npm run-script jspm
 
 mono:
-	DEBUG=micromono* node server/server.js --service-dir ./ --service account,home
+	DEBUG=micromono* node --harmony server/server.js --service-dir ./ --service account,home
 
 mono-io:
-	DEBUG=micromono* node server/server.js --service-dir ./ --service io
+	DEBUG=micromono* node --harmony server/server.js --service-dir ./ --service io
