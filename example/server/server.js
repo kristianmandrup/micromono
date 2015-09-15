@@ -3,9 +3,11 @@
  */
 
 // setup express app
-var app = require('express')();
-app.set('views', __dirname + '/views');
-app.set('view engine', 'jade');
+var koa = require('koa');
+var views = require('koa-render');
+var app = koa();
+app.use(views(__dirname + '/views'));
+// app.set('view engine', 'jade');
 
 // Get a micromono instance.
 var micromono = require('micromono')();
